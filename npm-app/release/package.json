@@ -1,10 +1,10 @@
 {
-  "name": "codebuff",
+  "name": "codebuff-gemini-rework",
   "version": "1.0.491",
   "description": "AI coding agent",
   "license": "MIT",
   "bin": {
-    "codebuff": "index.js"
+    "codebuff-gemini-rework": "index.js"
   },
   "scripts": {
     "preuninstall": "node -e \"const fs = require('fs'); const path = require('path'); const os = require('os'); const binaryPath = path.join(os.homedir(), '.config', 'manicode', process.platform === 'win32' ? 'codebuff.exe' : 'codebuff'); try { fs.unlinkSync(binaryPath) } catch (e) { /* ignore if file doesn't exist */ }\""
