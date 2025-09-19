@@ -4,6 +4,8 @@ import { type CostMode } from '@codebuff/common/old-constants'
 import { AnalyticsEvent } from '@codebuff/common/constants/analytics-events'
 import { Command, Option } from 'commander'
 import { red, yellow, green, bold } from 'picocolors'
+import inquirer from 'inquirer'
+import axios from 'axios'
 
 import { displayLoadedAgents, loadLocalAgents } from './agents/load-agents'
 import { CLI } from './cli'
@@ -31,6 +33,87 @@ import { logger } from './utils/logger'
 
 import type { CliOptions } from './types'
 
+async function getGeminiConfig() {
+  let apiKey = process.env.GEMINI_API_KEY;
+  let response;
+
+  if (apiKey) {
+    try {
+      response = await axios.get('https://generativelanguage.googleapis.com/v1beta/models', {
+        headers: {
+          'x-goog-api-key': apiKey,
+        },
+      });
+    } catch (error: any) {
+      if (error.response?.status === 400) {
+        apiKey = undefined; // Unset the invalid key
+      } else {
+        console.error(red('Error fetching Gemini models:'), error);
+        process.exit(1);
+      }
+    }
+  }
+
+  if (!apiKey && process.env.GOOGLE_API_KEY) {
+    apiKey = process.env.GOOGLE_API_KEY;
+    try {
+      response = await axios.get('https://generativelanguage.googleapis.com/v1beta/models', {
+        headers: {
+          'x-goog-api-key': apiKey,
+        },
+      });
+    } catch (error) {
+      console.error(red('Error fetching Gemini models with GOOGLE_API_KEY:'), error);
+      process.exit(1);
+    }
+  }
+
+  if (!apiKey) {
+    const answers = await inquirer.prompt([
+      {
+        type: 'password',
+        name: 'apiKey',
+        message: 'Please enter your Google AI API key:',
+        mask: '*',
+      },
+    ]);
+    apiKey = answers.apiKey;
+    try {
+      response = await axios.get('https://generativelanguage.googleapis.com/v1beta/models', {
+        headers: {
+          'x-goog-api-key': apiKey,
+        },
+      });
+    } catch (error) {
+      console.error(red('Error fetching Gemini models with provided key:'), error);
+      process.exit(1);
+    }
+  }
+
+  const models = response.data.models
+    .filter((model: any) => model.name.includes('gemini-2.5') || model.name.includes('gemini-3'))
+    .map((model: any) => ({
+      name: `${model.displayName} (${model.name})`,
+      value: model.name,
+    }));
+
+  if (models.length === 0) {
+    console.error(red('No valid Gemini 2.5 or newer models found.'));
+    process.exit(1);
+  }
+
+  const answers = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'model',
+      message: 'Please select a Gemini model to use:',
+      choices: models,
+    },
+  ]);
+
+  return { apiKey, model: answers.model };
+}
+
 async function codebuff({
   initialInput,
   git,
@@ -42,6 +125,7 @@ async function codebuff({
   print,
   cwd,
   trace,
+  apiKey,
 }: CliOptions) {
   enableSquashNewlines()
   const workingDir = getWorkingDirectory()
@@ -51,7 +135,7 @@ async function codebuff({
   // Kill all processes we failed to kill before
   const processCleanupPromise = logAndHandleStartup()
 
-  initAnalytics()
+  // initAnalytics()
   rageDetectors.startupTimeDetector.start()
 
   const initFileContextPromise = initProjectFileContextWithWorker(projectRoot)
@@ -83,6 +167,7 @@ async function codebuff({
     params,
     print,
     trace,
+    apiKey,
   })
 
   const cli = CLI.getInstance()
@@ -92,9 +177,12 @@ async function codebuff({
 }
 
 if (require.main === module) {
-  const program = new Command()
+  (async () => {
+    const geminiConfig = await getGeminiConfig();
 
-  program.name('codebuff').version(npmAppVersion || '0.0.0')
+    const program = new Command()
+
+    program.name('codebuff').version(npmAppVersion || '0.0.0')
 
   // Add arguments from shared definitions
   cliArguments.forEach((arg) => {
@@ -245,11 +333,13 @@ For all commands and options, run 'codebuff' and then type 'help'.
     git,
     costMode,
     runInitFlow: options.init,
-    model: options.model,
+    model: geminiConfig.model,
     agent: options.agent,
     params: parsedAgentParams,
     print: options.print,
     cwd: options.cwd,
     trace: options.trace,
+    apiKey: geminiConfig.apiKey,
   })
+  })();
 }

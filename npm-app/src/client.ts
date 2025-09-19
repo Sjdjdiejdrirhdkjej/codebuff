@@ -111,10 +111,16 @@ const LOW_BALANCE_THRESHOLD = 100
 async function sendActionAndHandleError(
   ws: APIRealtimeClient,
   action: ClientAction,
+  apiKey?: string,
 ) {
   try {
     return await ws.sendAction(action)
-  } catch (e) {
+  } catch (e: any) {
+    if (e.message.includes('429') && apiKey === process.env.GEMINI_API_KEY && process.env.GOOGLE_API_KEY) {
+      console.log(yellow('GEMINI_API_KEY rate limited. Trying GOOGLE_API_KEY...'));
+      const newAction = { ...action, authToken: process.env.GOOGLE_API_KEY };
+      return await ws.sendAction(newAction);
+    }
     // Print the error message for debugging.
     console.error(
       'Error sending action:',
@@ -193,6 +199,7 @@ interface ClientOptions {
   costMode: CostMode
   git: GitCommand
   model: string | undefined
+  apiKey?: string
 }
 
 export class Client {
@@ -222,6 +229,7 @@ export class Client {
   public storedApiKeyTypes: ApiKeyType[] = []
   public lastToolResults: ToolResultPart[] = []
   public model: string | undefined
+  public apiKey: string | undefined
   public oneTimeFlags: Record<(typeof ONE_TIME_LABELS)[number], boolean> =
     Object.fromEntries(ONE_TIME_LABELS.map((tag) => [tag, false])) as Record<
       (typeof ONE_TIME_LABELS)[number],
@@ -238,9 +246,11 @@ export class Client {
     reconnectWhenNextIdle,
     costMode,
     model,
+    apiKey,
   }: ClientOptions) {
     this.costMode = costMode
     this.model = model
+    this.apiKey = apiKey
     this.webSocket = new APIRealtimeClient(
       websocketUrl,
       onWebSocketError,
@@ -793,11 +803,15 @@ export class Client {
       const { filePaths, requestId } = a
       const files = getFiles(filePaths)
 
-      sendActionAndHandleError(this.webSocket, {
-        type: 'read-files-response',
-        files,
-        requestId,
-      })
+      sendActionAndHandleError(
+        this.webSocket,
+        {
+          type: 'read-files-response',
+          files,
+          requestId,
+        },
+        this.apiKey,
+      )
       if (this.userInputId) {
         Spinner.get().start('Processing results...')
       }
@@ -824,9 +838,11 @@ export class Client {
           'User input ID mismatch - rejecting tool call request',
         )
 
-        sendActionAndHandleError(this.webSocket, {
-          type: 'tool-call-response',
-          requestId,
+        sendActionAndHandleError(
+          this.webSocket,
+          {
+            type: 'tool-call-response',
+            requestId,
           output: [
             {
               type: 'json',
@@ -856,11 +872,15 @@ export class Client {
         if (this.userInputId) {
           Spinner.get().start('Processing results...')
         }
-        sendActionAndHandleError(this.webSocket, {
-          type: 'tool-call-response',
-          requestId,
-          output: toolResult.output,
-        })
+        sendActionAndHandleError(
+          this.webSocket,
+          {
+            type: 'tool-call-response',
+            requestId,
+            output: toolResult.output,
+          },
+          this.apiKey,
+        )
       } catch (error) {
         logger.error(
           {
@@ -874,9 +894,11 @@ export class Client {
 
         // Send error response back to backend
         Spinner.get().start('Fixing...')
-        sendActionAndHandleError(this.webSocket, {
-          type: 'tool-call-response',
-          requestId,
+        sendActionAndHandleError(
+          this.webSocket,
+          {
+            type: 'tool-call-response',
+            requestId,
           output: [
             {
               type: 'json',
@@ -1122,13 +1144,13 @@ export class Client {
       sessionState: this.sessionState,
       toolResults,
       fingerprintId: await this.fingerprintId,
-      authToken: process.env[API_KEY_ENV_VAR] || this.user?.authToken,
+      authToken: this.apiKey || process.env[API_KEY_ENV_VAR] || this.user?.authToken,
       costMode: this.costMode,
       model: this.model,
       repoUrl: loggerContext.repoUrl,
       // repoName: loggerContext.repoName,
     }
-    sendActionAndHandleError(this.webSocket, action)
+    sendActionAndHandleError(this.webSocket, action, this.apiKey)
 
     return {
       responsePromise,
@@ -1235,11 +1257,15 @@ export class Client {
       (id) => id !== this.userInputId,
     )
 
-    sendActionAndHandleError(this.webSocket, {
-      type: 'cancel-user-input',
-      authToken: this.user?.authToken,
-      promptId: this.userInputId,
-    })
+    sendActionAndHandleError(
+      this.webSocket,
+      {
+        type: 'cancel-user-input',
+        authToken: this.user?.authToken,
+        promptId: this.userInputId,
+      },
+      this.apiKey,
+    )
     this.userInputId = undefined
   }
 
@@ -1674,7 +1700,7 @@ Go to https://www.codebuff.com/config for more information.`) +
       // Add repoUrl here as per the diff for client.ts
       repoUrl: loggerContext.repoUrl,
     }
-    sendActionAndHandleError(this.webSocket, initAction)
+    sendActionAndHandleError(this.webSocket, initAction, this.apiKey)
 
     await this.fetchStoredApiKeyTypes()
   }
