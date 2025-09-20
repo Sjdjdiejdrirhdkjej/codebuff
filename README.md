@@ -30,14 +30,20 @@ This multi-agent approach gives you better context understanding, more accurate 
 Install:
 
 ```bash
-npm install -g codebuff
+npm install -g codebuff-gemini
 ```
 
 Run:
 
 ```bash
 cd your-project
-codebuff
+codebuff-gemini
+```
+
+Or use the short alias `cbg`:
+
+```bash
+cbg
 ```
 
 Then just tell Codebuff what you want and it handles the rest:
@@ -159,7 +165,7 @@ Some ways you can help:
 
 ### Install
 
-**CLI**: `npm install -g codebuff`
+**CLI**: `npm install -g codebuff-gemini`
 
 **SDK**: `npm install @codebuff/sdk`
 
