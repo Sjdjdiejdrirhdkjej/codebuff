@@ -12,3 +12,5 @@ export const backendUrl =
     : `https://${process.env.NEXT_PUBLIC_CODEBUFF_BACKEND_URL}`
 
 export const npmAppVersion = process.env.NEXT_PUBLIC_NPM_APP_VERSION
+
+export const GOOGLE_AI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models'
