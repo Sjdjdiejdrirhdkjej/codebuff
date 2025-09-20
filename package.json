@@ -1,8 +1,11 @@
 {
-  "name": "codebuff-project",
+  "name": "codebuff-gemini",
   "version": "1.0.0",
-  "private": true,
   "license": "Apache-2.0",
+  "bin": {
+    "codebuff-gemini": "npm-app/release/index.js",
+    "cbg": "npm-app/release/index.js"
+  },
   "type": "module",
   "workspaces": [
     "common",
